@@ -1,0 +1,58 @@
+# Publie le site sur GitHub Pages à chaque modification.
+# Au premier lancement, il télécharge aussi les images et vidéos depuis Framer
+# et les enregistre dans le dépôt : ensuite, le site ne dépend plus de Framer.
+name: Publier le site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer ffmpeg (compression des vidéos)
+        run: |
+          if ls scripts/medias.txt >/dev/null && [ ! -d assets/video ]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          fi
+
+      - name: Récupérer les médias manquants depuis Framer
+        run: bash scripts/recuperer-medias.sh
+
+      - name: Enregistrer les médias dans le dépôt
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add assets
+          if ! git diff --cached --quiet; then
+            git commit -m "Ajout des images et vidéos du site"
+            git push
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
